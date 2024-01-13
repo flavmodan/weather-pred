@@ -87,7 +87,7 @@ print("Input shape:", inputs.numpy().shape)
 print("Target shape:", targets.numpy().shape)
 
 inputs = keras.layers.Input(shape=(inputs.shape[1], inputs.shape[2]))
-lstm_out = keras.layers.LSTM(64)(inputs)
+lstm_out = keras.layers.LSTM(128)(inputs)
 # d = keras.layers.Dense(64)(lstm_out)
 h = keras.layers.Dense(len(features_to_predict))(lstm_out)
 
