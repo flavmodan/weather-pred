@@ -40,41 +40,35 @@ def get_temp():
                       pd.DataFrame(hours_cos,columns=[len(list(weather_data.columns))+2]),
                       pd.DataFrame(days_cos,columns=[len(list(weather_data.columns))+3])
                       ],axis=1).values
-    # t_in = data[:days_before*24]
     data = np.array([data])
-    out = model.predict(data)[0][0]
-
-    # tt_out = data[days_before*24+hours_after][0] * norm_data[2] + norm_data[3]
-
-    temp = out * norm_data[2] + norm_data[3]
-    return round(temp)
+    out = model.predict(data)[0]
+    out = out * norm_data[2] + norm_data[3]
+    temp = out[0]
+    humidity = out[1]
+    return round(temp), round(humidity)
 
 load_model()
 app = flask.Flask(__name__)
 
 @app.route("/predict", methods=["GET"])
 def predict():
-    # initialize the data dictionary that will be returned from the
-    # view
     data = {"success": False}
 
     try:
-        temp = get_temp()
-        data["temp"] = temp
+        t,h = get_temp()
+        data["temp"] = t
+        data["humidity"] = h
         data["success"] = True
     except Exception as e:
         data["reason"] = str(e)
         return flask.jsonify(data)
-     # return the data dictionary as a JSON response
     return flask.jsonify(data)
 
 @app.route("/",methods=["GET"])
 def page():
-    temp = get_temp()
-    return flask.render_template("landing_page.html",temp=f"{temp} °C")
+    t,h = get_temp()
+    return flask.render_template("landing_page.html",temp=f"{t} °C",hum=f"{h}%")
 
-# if this is the main thread of execution first load the model and
-# then start the server
 if __name__ == "__main__":
     print(("* Loading Keras model and Flask starting server..."
         "please wait until server has fully started"))

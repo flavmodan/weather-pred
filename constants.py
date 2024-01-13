@@ -9,6 +9,6 @@ bucharest_station = weather_stations.nearby(lat=bucharest_coords[0],lon=buchares
 LATEST_MODEL_PATH = f"models/model.keras"
 NORM_DATA_PATH = "archive/norm_data.pkl"
 
-past_days = 4
+past_days = 7
 past = past_days*24
 future = 2

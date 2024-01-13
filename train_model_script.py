@@ -19,6 +19,8 @@ hours_cos = np.cos(weather_data.index.map(pd.Timestamp.timestamp).values / (24*6
 days_cos = np.cos(weather_data.index.map(pd.Timestamp.timestamp).values / (365.2425*24*60*60)*2*np.pi)
 # hours = np.sin(hours*2*np.pi)
 num_of_features = len(list(weather_data.columns)) + 4
+features_to_predict = [1,3]
+# features_to_predict = [1]
 
 split_fraction = 0.715
 train_split = int(split_fraction * int(weather_data.shape[0]))
@@ -32,7 +34,7 @@ def normalize(series,train_split):
     mean = series[:train_split].mean(axis=0)
     std = series[:train_split].std(axis=0)
     with open(NORM_DATA_PATH,"wb") as f:
-        pickle.dump((std,mean,std[0],mean[0]),f)
+        pickle.dump((std,mean,std[np.array(features_to_predict) - 1],mean[np.array(features_to_predict) - 1]),f)
     return (series - mean) / std
 
 features = normalize(weather_data.values, train_split)
@@ -50,7 +52,7 @@ start = past + future
 end = start + train_split
 
 x_train = train_data[[i for i in range(num_of_features)]].values
-y_train = features.iloc[start:end][[1]]
+y_train = features.iloc[start:end][features_to_predict]
 
 sequence_length = int(past / step)
 
@@ -67,7 +69,7 @@ x_end = len(val_data) - past - future
 label_start = train_split + past + future
 
 x_val = val_data.iloc[:x_end][[i for i in range(num_of_features)]].values
-y_val = features.iloc[label_start:][[1]]
+y_val = features.iloc[label_start:][features_to_predict]
 
 dataset_val = keras.preprocessing.timeseries_dataset_from_array(
     x_val,
@@ -85,10 +87,11 @@ print("Input shape:", inputs.numpy().shape)
 print("Target shape:", targets.numpy().shape)
 
 inputs = keras.layers.Input(shape=(inputs.shape[1], inputs.shape[2]))
-lstm_out = keras.layers.LSTM(32)(inputs)
-outputs = keras.layers.Dense(1)(lstm_out)
+lstm_out = keras.layers.LSTM(64)(inputs)
+# d = keras.layers.Dense(64)(lstm_out)
+h = keras.layers.Dense(len(features_to_predict))(lstm_out)
 
-model = keras.Model(inputs=inputs, outputs=outputs)
+model = keras.Model(inputs=inputs, outputs=h)
 model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate), loss="mse")
 model.summary()
 
@@ -100,7 +103,7 @@ modelckpt_callback = keras.callbacks.ModelCheckpoint(
     filepath=path_checkpoint,
     verbose=1,
     save_best_only=True,
-    mode="max"
+    mode="min"
 )
 
 history = model.fit(
@@ -150,113 +153,7 @@ def show_plot(plot_data, delta, title):
 
 for x, y in dataset_val.take(5):
     show_plot(
-        [x[0][:, 1].numpy(), y[0].numpy(), model.predict(x)[0]],
-        12,
+        [x[0][:, 1].numpy(), y[0].numpy()[0], model.predict(x)[0][0]],
+        future,
         "Single Step Prediction",
     )
-
-# points_before = 7*24
-# points_after = 6
-
-# batch_size = 64
-
-# # hours = weather_data.index.hour
-# # weather_data = pd.concat([weather_data,pd.DataFrame(hours,index=weather_data.index)],axis=1)
-# temperature = weather_data["temp"]
-# temp_mean = temperature.mean(axis=0)
-# temp_std = temperature.std(axis=0)
-
-# def normalize(series):
-#     mean = series.mean(axis=0)
-#     std = series.std(axis=0)
-#     with open(NORM_DATA_PATH,"wb") as f:
-#         pickle.dump((std,mean,temp_std,temp_mean),f)
-#     return (series - mean) / std
-
-
-
-# features = normalize(weather_data.values)
-# features = pd.DataFrame(features)
-
-# train_split = 0.8
-
-# train_size = int(train_split * features.shape[0])
-
-# train_data = features[0:train_size+1]
-# val_data = features.loc[train_size:]
-
-# start = points_before+points_after # hours in the past to get as input + hours in the future to predict
-# end = start + train_size
-
-# x_train = train_data.values
-# y_train = features.iloc[start:end]
-
-# sequence_length = int(points_before)
-
-# from tensorflow import keras
-
-# dataset_train = keras.utils.timeseries_dataset_from_array(
-#     data=x_train,
-#     targets=y_train,
-#     sequence_length=sequence_length,
-#     batch_size=batch_size,
-# )
-
-# x_val_end = len(val_data) - start
-
-# label_start = train_size + start
-
-# x_val = val_data.iloc[:x_val_end][[i for i in range(num_of_features)]].values
-# y_val = features.iloc[label_start:][[0]]
-
-# dataset_val = keras.utils.timeseries_dataset_from_array(
-#     x_val,
-#     y_val,
-#     sequence_length=sequence_length,
-#     batch_size=batch_size,
-# )
-
-# for batch in dataset_train.take(1):
-#     inputs, targets = batch
-    
-# inputs = keras.layers.Input(shape=(inputs.shape[1], inputs.shape[2]))
-# d = keras.layers.LSTM(32)(inputs)
-# # d = keras.layers.Dense(32,activation="relu")(inputs)
-# # d = keras.layers.Dense(32)(d)
-# outputs = keras.layers.Dense(1)(d)#(lstm_out)
-# model = keras.Model(name="Weather_forcaster",inputs=inputs, outputs=outputs)
-
-
-
-
-# # model.compile(optimizer=keras.optimizers.Nadam(
-# #     learning_rate=0.00001, beta_1=0.9, beta_2=0.999, epsilon=1e-07,
-# #     name='Nadam'
-# # ), loss="mse")
-
-# model.compile(optimizer="adam",loss="mse")
-
-# model.summary()
-
-# history = model.fit(
-#     dataset_train,
-#     epochs=15,
-#     validation_data=dataset_val
-# )
-
-# model.save(LATEST_MODEL_PATH)
-
-# import matplotlib.pyplot as plt
-
-
-# for x, y in dataset_val:
-#     history_data = x[0][:, 1].numpy() * temp_std + temp_mean
-#     true_value = y[0].numpy() * temp_std + temp_mean
-#     prediction = model.predict(x)[0] * temp_std + temp_mean
-#     time_steps = list(range(-(history_data.shape[0]), 0))
-#     plt.plot(time_steps, history_data)
-#     plt.plot(points_after, true_value, "gD")
-#     plt.plot(points_after, prediction, "rX")
-#     plt.legend(["History", "True Future", "Model Prediction"])
-#     plt.xlabel("Time")
-#     plt.show()
