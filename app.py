@@ -9,20 +9,17 @@ from meteostat import Hourly
 import pandas as pd
 
 # initialize our Flask application and the Keras model
-app = flask.Flask(__name__)
 model = None
 norm_data = None
 
 
 def load_model():
-    # load the pre-trained Keras model (here we are using a model
-    # pre-trained on ImageNet and provided by Keras, but you can
-    # substitute in your own networks just as easily)
     global model
     global norm_data
     model = tf.keras.models.load_model(LATEST_MODEL_PATH)
     with open(NORM_DATA_PATH,"rb") as f:
         norm_data = pickle.load(f)
+    print(norm_data)
 
 def get_temp():
 
@@ -52,6 +49,8 @@ def get_temp():
     temp = out * norm_data[2] + norm_data[3]
     return round(temp)
 
+load_model()
+app = flask.Flask(__name__)
 
 @app.route("/predict", methods=["GET"])
 def predict():
@@ -59,20 +58,25 @@ def predict():
     # view
     data = {"success": False}
 
-    # ensure an image was properly uploaded to our endpoint
-    if flask.request.method == "GET":
+    try:
         temp = get_temp()
         data["temp"] = temp
         data["success"] = True
+    except Exception as e:
+        data["reason"] = str(e)
+        return flask.jsonify(data)
      # return the data dictionary as a JSON response
     return flask.jsonify(data)
+
+@app.route("/",methods=["GET"])
+def page():
+    temp = get_temp()
+    return flask.render_template("landing_page.html",temp=f"{temp} °C")
 
 # if this is the main thread of execution first load the model and
 # then start the server
 if __name__ == "__main__":
     print(("* Loading Keras model and Flask starting server..."
         "please wait until server has fully started"))
-    load_model()
-    d = get_temp()
     
     app.run()

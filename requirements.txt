@@ -10,6 +10,7 @@ contourpy==1.2.0
 cycler==0.12.1
 easydict==1.11
 Flask==3.0.0
+Flask-Script==2.0.6
 flatbuffers==23.5.26
 flickr-api==0.7.7
 fonttools==4.47.2
@@ -20,6 +21,7 @@ google-auth-oauthlib==1.2.0
 google-pasta==0.2.0
 greenlet==3.0.3
 grpcio==1.60.0
+gunicorn==21.2.0
 h5py==3.10.0
 httplib2==0.22.0
 idna==3.6
