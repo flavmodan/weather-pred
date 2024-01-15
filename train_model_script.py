@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 start_date = datetime(2021,1,15)
-end_date = datetime(2024,1,11)
+end_date = datetime(2024,1,13)
 
 weather_data = Hourly(bucharest_station,start_date,end_date).fetch()
 weather_data = weather_data[['temp', 'dwpt', 'rhum', 'wdir', 'wspd', 'pres']]
@@ -19,10 +19,10 @@ hours_cos = np.cos(weather_data.index.map(pd.Timestamp.timestamp).values / (24*6
 days_cos = np.cos(weather_data.index.map(pd.Timestamp.timestamp).values / (365.2425*24*60*60)*2*np.pi)
 # hours = np.sin(hours*2*np.pi)
 num_of_features = len(list(weather_data.columns)) + 4
-features_to_predict = [1,3]
+features_to_predict = [1]
 # features_to_predict = [1]
 
-split_fraction = 0.715
+split_fraction = 0.8
 train_split = int(split_fraction * int(weather_data.shape[0]))
 step = 1
 
@@ -88,7 +88,6 @@ print("Target shape:", targets.numpy().shape)
 
 inputs = keras.layers.Input(shape=(inputs.shape[1], inputs.shape[2]))
 lstm_out = keras.layers.LSTM(128)(inputs)
-# d = keras.layers.Dense(64)(lstm_out)
 h = keras.layers.Dense(len(features_to_predict))(lstm_out)
 
 model = keras.Model(inputs=inputs, outputs=h)

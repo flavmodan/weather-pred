@@ -44,8 +44,8 @@ def get_temp():
     out = model.predict(data)[0]
     out = out * norm_data[2] + norm_data[3]
     temp = out[0]
-    humidity = out[1]
-    return round(temp), round(humidity)
+    # humidity = out[1]
+    return round(temp), 0#round(humidity)
 
 load_model()
 app = flask.Flask(__name__)
@@ -57,7 +57,7 @@ def predict():
     try:
         t,h = get_temp()
         data["temp"] = t
-        data["humidity"] = h
+        # data["humidity"] = h
         data["success"] = True
     except Exception as e:
         data["reason"] = str(e)
