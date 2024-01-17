@@ -1,49 +1,16 @@
-from meteostat import Hourly
-from datetime import timedelta,datetime
-from constants import bucharest_station,LATEST_MODEL_PATH,NORM_DATA_PATH,past,future
-import pickle
-import pandas as pd
+from copy import deepcopy
+from datetime import datetime
+from lib import *
+
 from tensorflow import keras
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 
 start_date = datetime(2021,1,15)
 end_date = datetime(2024,1,13)
 
-weather_data = Hourly(bucharest_station,start_date,end_date).fetch()
-weather_data = weather_data[['temp', 'dwpt', 'rhum', 'wdir', 'wspd', 'pres']]
-weather_data = weather_data.dropna(axis=1,how="any")
-hours_sin = np.sin(weather_data.index.map(pd.Timestamp.timestamp).values / (24*60*60)*2*np.pi)
-days_sin = np.sin(weather_data.index.map(pd.Timestamp.timestamp).values / (365.2425*24*60*60)*2*np.pi)
-hours_cos = np.cos(weather_data.index.map(pd.Timestamp.timestamp).values / (24*60*60)*2*np.pi)
-days_cos = np.cos(weather_data.index.map(pd.Timestamp.timestamp).values / (365.2425*24*60*60)*2*np.pi)
-# hours = np.sin(hours*2*np.pi)
-num_of_features = len(list(weather_data.columns)) + 4
-features_to_predict = [1]
-# features_to_predict = [1]
-
-split_fraction = 0.8
-train_split = int(split_fraction * int(weather_data.shape[0]))
-step = 1
-
-learning_rate = 0.001
-batch_size = 256
-epochs = 10
-
-def normalize(series,train_split):
-    mean = series[:train_split].mean(axis=0)
-    std = series[:train_split].std(axis=0)
-    with open(NORM_DATA_PATH,"wb") as f:
-        pickle.dump((std,mean,std[np.array(features_to_predict) - 1],mean[np.array(features_to_predict) - 1]),f)
-    return (series - mean) / std
-
-features = normalize(weather_data.values, train_split)
-features = pd.concat([pd.DataFrame(features),
-                      pd.DataFrame(hours_sin,columns=[len(list(weather_data.columns))]),
-                      pd.DataFrame(days_sin,columns=[len(list(weather_data.columns))+1]),
-                      pd.DataFrame(hours_cos,columns=[len(list(weather_data.columns))+2]),
-                      pd.DataFrame(days_cos,columns=[len(list(weather_data.columns))+3])
-                      ],axis=1)
+features,num_of_features,train_split = get_weather_data(start_date,end_date,for_train=True)
 
 train_data = features.loc[0 : train_split - 1]
 val_data = features.loc[train_split:]
@@ -86,31 +53,88 @@ for batch in dataset_train.take(1):
 print("Input shape:", inputs.numpy().shape)
 print("Target shape:", targets.numpy().shape)
 
-inputs = keras.layers.Input(shape=(inputs.shape[1], inputs.shape[2]))
-lstm_out = keras.layers.LSTM(128)(inputs)
-h = keras.layers.Dense(len(features_to_predict))(lstm_out)
+input_shape = inputs.numpy().shape
+output_shape = targets.numpy().shape
 
-model = keras.Model(inputs=inputs, outputs=h)
-model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate), loss="mse")
+def generate_model(lstm_units,dense_configuration,dense_units_for_time_periods,learning_rate):
+    inputs = keras.layers.Input(shape=(input_shape[1], input_shape[2]))
+    w_tensor = inputs[:,:,:input_shape[2]-2]
+    time_tensor = inputs[:,:,input_shape[2]-2:]
+    time_out = keras.layers.Dense(dense_units_for_time_periods,activation="tanh")(time_tensor)
+    lstm_in = keras.layers.concatenate([w_tensor,time_out])
+    lstm_out = keras.layers.LSTM(lstm_units)(lstm_in)
+    for num_of_units in dense_configuration:
+        lstm_out = keras.layers.Dense(num_of_units)(lstm_out)
+    h = keras.layers.Dense(len(features_to_predict))(lstm_out)
+    model = keras.Model(inputs=inputs, outputs=h)
+    model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate), loss="mse",metrics=["cosine_similarity"])
+    model.summary()
+    return model
+
+def get_mode_performance(model):
+    res = model.evaluate(dataset_val)
+    return res
+
+def is_better_perf(best_so_far,now):
+    if best_so_far is None:
+        return True
+    if best_so_far[1] < now[1] and best_so_far[0] > now[0]:
+        return True
+    return False
+
+def train_and_check(model):
+    history = model.fit(
+        dataset_train,
+        epochs=epochs,
+        validation_data=dataset_val,
+        callbacks=[],
+    )
+
+    return get_mode_performance(model),history
+
+def get_model_copy(model):
+    # return tf.keras.models.clone_model(model)
+    model.save("temp.keras")
+    return tf.keras.models.load_model("temp.keras")
+
+max_number_of_dense_layers = 2
+dense_counts_per_layer = [16,32]
+dense_units_for_time = [4,8,12]
+lstm_unit_counts = [32,64,128]
+learning_rates = [0.001,0.0005,0.0001]
+
+best_model = None
+best_model_history = None
+best_model_performance = None
+
+num_of_models = len(dense_units_for_time)*len(lstm_unit_counts)*len(learning_rates)*(1+(max_number_of_dense_layers-1)*len(dense_counts_per_layer))
+model_num = 1
+
+for num_of_dense in range(max_number_of_dense_layers):
+    dense_counts_to_try = dense_counts_per_layer
+    if num_of_dense == 0:
+        dense_counts_to_try = [0]
+    for dense_count in dense_counts_to_try:
+        for time_dense in dense_units_for_time:
+            for lstm_units in lstm_unit_counts:
+                for lr in learning_rates:
+                    print(f"\nModel {model_num} out of {num_of_models}\n")
+                    model_num+=1
+                    model = generate_model(lstm_units,[dense_count]*num_of_dense,time_dense,lr)
+                    perf,hist = train_and_check(model)
+                    print(f"Model performace {perf}")
+                    if is_better_perf(best_model_performance,perf):
+                        best_model = get_model_copy(model)
+                        best_model_performance = deepcopy(perf)
+                        best_model_history = hist
+                        print(f"Updated best model performance to {best_model_performance}")
+
+model = get_model_copy(best_model)
+print(f"best model summary :")
 model.summary()
-
-path_checkpoint = LATEST_MODEL_PATH
-es_callback = keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0, patience=5)
-
-modelckpt_callback = keras.callbacks.ModelCheckpoint(
-    monitor="val_loss",
-    filepath=path_checkpoint,
-    verbose=1,
-    save_best_only=True,
-    mode="min"
-)
-
-history = model.fit(
-    dataset_train,
-    epochs=epochs,
-    validation_data=dataset_val,
-    callbacks=[es_callback, modelckpt_callback],
-)
+perf = get_mode_performance(model)
+print(f"best model perf {perf}")
+model.save(LATEST_MODEL_PATH)
 
 def visualize_loss(history, title):
     loss = history.history["loss"]
@@ -125,7 +149,7 @@ def visualize_loss(history, title):
     plt.legend()
     plt.show()
 
-visualize_loss(history, "Training and Validation Loss")
+visualize_loss(best_model_history, "Training and Validation Loss")
 
 
 def show_plot(plot_data, delta, title):
