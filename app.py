@@ -5,7 +5,6 @@ import datetime
 import tensorflow as tf
 from lib import *
 import pickle
-import pandas as pd
 
 # initialize our Flask application and the Keras model
 model = None
@@ -13,6 +12,7 @@ norm_data = None
 
 
 def load_model():
+    # load keras model
     global model
     global norm_data
     model = tf.keras.models.load_model(LATEST_MODEL_PATH)
@@ -21,7 +21,7 @@ def load_model():
     print(norm_data)
 
 def get_temp():
-
+    # do a prediction from current conditions
     end_date = datetime.datetime.now()
     start_date = end_date - datetime.timedelta(days=past_days)
     data,_,__ = get_weather_data(start_date,end_date,norm_data=norm_data)

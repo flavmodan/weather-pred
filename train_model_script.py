@@ -5,11 +5,11 @@ from lib import *
 from tensorflow import keras
 import tensorflow as tf
 import matplotlib.pyplot as plt
-import numpy as np
 
 start_date = datetime(2021,1,15)
 end_date = datetime(2024,1,13)
 
+# generate train and evaluation datasets
 features,num_of_features,train_split = get_weather_data(start_date,end_date,for_train=True)
 
 train_data = features.loc[0 : train_split - 1]
@@ -56,6 +56,8 @@ print("Target shape:", targets.numpy().shape)
 input_shape = inputs.numpy().shape
 output_shape = targets.numpy().shape
 
+# func to generate model for grid search
+
 def generate_model(lstm_units,dense_configuration,dense_units_for_time_periods,learning_rate):
     inputs = keras.layers.Input(shape=(input_shape[1], input_shape[2]))
     w_tensor = inputs[:,:,:input_shape[2]-2]
@@ -71,10 +73,12 @@ def generate_model(lstm_units,dense_configuration,dense_units_for_time_periods,l
     model.summary()
     return model
 
+# evaluate model
 def get_mode_performance(model):
     res = model.evaluate(dataset_val)
     return res
 
+# compare performances
 def is_better_perf(best_so_far,now):
     if best_so_far is None:
         return True
@@ -82,6 +86,7 @@ def is_better_perf(best_so_far,now):
         return True
     return False
 
+# train model and return performance
 def train_and_check(model):
     history = model.fit(
         dataset_train,
@@ -92,11 +97,13 @@ def train_and_check(model):
 
     return get_mode_performance(model),history
 
+# get deepcopy of a model
 def get_model_copy(model):
     # return tf.keras.models.clone_model(model)
     model.save("temp.keras")
     return tf.keras.models.load_model("temp.keras")
 
+# parameters for grid search
 max_number_of_dense_layers = 2
 dense_counts_per_layer = [16,32]
 dense_units_for_time = [4,8,12]
@@ -109,6 +116,8 @@ best_model_performance = None
 
 num_of_models = len(dense_units_for_time)*len(lstm_unit_counts)*len(learning_rates)*(1+(max_number_of_dense_layers-1)*len(dense_counts_per_layer))
 model_num = 1
+
+# gridsearch best arhitecture
 
 for num_of_dense in range(max_number_of_dense_layers):
     dense_counts_to_try = dense_counts_per_layer
@@ -129,6 +138,7 @@ for num_of_dense in range(max_number_of_dense_layers):
                         best_model_history = hist
                         print(f"Updated best model performance to {best_model_performance}")
 
+# show and save best model 
 model = get_model_copy(best_model)
 print(f"best model summary :")
 model.summary()
@@ -136,6 +146,7 @@ perf = get_mode_performance(model)
 print(f"best model perf {perf}")
 model.save(LATEST_MODEL_PATH)
 
+# visualize best model performance on real unseen data
 def visualize_loss(history, title):
     loss = history.history["loss"]
     val_loss = history.history["val_loss"]
